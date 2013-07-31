@@ -45,6 +45,12 @@ AC_SUBST(DMX_LIBS)
 
 XORG_CHECK_MALLOC_ZERO
 
+# Check for _XEatDataWords function that may be patched into older Xlib releases
+SAVE_LIBS="$LIBS"
+LIBS="$DMX_LIBS"
+AC_CHECK_FUNCS([_XEatDataWords])
+LIBS="$SAVE_LIBS"
+
 AC_OUTPUT([Makefile
 	   src/Makefile
 	   man/Makefile
