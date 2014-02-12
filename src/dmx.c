@@ -1,4 +1,3 @@
-/* $XFree86$ */
 /*
  * Copyright 2002-2004 Red Hat Inc., Durham, North Carolina.
  *
@@ -39,13 +38,16 @@
  * can be included in client applications by linking with the libdmx.a
  * library. */
 
-#define NEED_REPLIES
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
 #include <X11/Xlibint.h>
 #include <X11/extensions/Xext.h>
 #define EXTENSION_PROC_ARGS void *
 #include <X11/extensions/extutil.h>
 #include <X11/extensions/dmxproto.h>
 #include <X11/extensions/dmxext.h>
+#include <limits.h>
 
 static XExtensionInfo dmx_extension_info_data;
 static XExtensionInfo *dmx_extension_info = &dmx_extension_info_data;
@@ -78,11 +80,24 @@ static /* const */ XExtensionHooks dmx_extension_hooks = {
 };
 
 static XEXT_GENERATE_FIND_DISPLAY(find_display, dmx_extension_info,
-                                  (char *)dmx_extension_name,
+                                  dmx_extension_name,
                                   &dmx_extension_hooks,
                                   0, NULL)
 
 static XEXT_GENERATE_CLOSE_DISPLAY(close_display, dmx_extension_info)
+
+#ifndef HAVE__XEATDATAWORDS
+#include <X11/Xmd.h>  /* for LONG64 on 64-bit platforms */
+
+static inline void _XEatDataWords(Display *dpy, unsigned long n)
+{
+# ifndef LONG64
+    if (n >= (ULONG_MAX >> 2))
+        _XIOError(dpy);
+# endif
+    _XEatData (dpy, n << 2);
+}
+#endif
 
 
 /*****************************************************************************
@@ -235,6 +250,7 @@ Bool DMXGetScreenAttributes(Display *dpy, int physical_screen,
     XExtDisplayInfo              *info = find_display(dpy);
     xDMXGetScreenAttributesReply rep;
     xDMXGetScreenAttributesReq   *req;
+    Bool                          ret = False;
 
     DMXCheckExtension(dpy, info, False);
 
@@ -249,11 +265,19 @@ Bool DMXGetScreenAttributes(Display *dpy, int physical_screen,
         SyncHandle();
         return False;
     }
-    attr->displayName  = Xmalloc(rep.displayNameLength + 1 + 4 /* for pad */);
+
+    if (rep.displayNameLength < 1024)
+        attr->displayName = Xmalloc(rep.displayNameLength + 1 + 4 /* for pad */);
+    else
+        attr->displayName = NULL;  /* name length is unbelievable, reject */
+    if (attr->displayName == NULL) {
+        _XEatDataWords(dpy, rep.length);
+        goto end;
+    }
     _XReadPad(dpy, attr->displayName, rep.displayNameLength);
     attr->displayName[rep.displayNameLength] = '\0';
     attr->logicalScreen       = rep.logicalScreen;
-    
+
     attr->screenWindowWidth   = rep.screenWindowWidth;
     attr->screenWindowHeight  = rep.screenWindowHeight;
     attr->screenWindowXoffset = rep.screenWindowXoffset;
@@ -265,9 +289,13 @@ Bool DMXGetScreenAttributes(Display *dpy, int physical_screen,
     attr->rootWindowYoffset   = rep.rootWindowYoffset;
     attr->rootWindowXorigin   = rep.rootWindowXorigin;
     attr->rootWindowYorigin   = rep.rootWindowYorigin;
+
+    ret = True;
+
+  end:
     UnlockDisplay(dpy);
     SyncHandle();
-    return True;
+    return ret;
 }
 
 static CARD32 _DMXGetScreenAttribute(int bit, DMXScreenAttributes *attr)
@@ -295,7 +323,7 @@ static int _DMXDumpScreenAttributes(Display *dpy,
     unsigned long value_list[32];
     unsigned long *value = value_list;
     int           count  = 0;
-        
+
     for (i = 0; i < 32; i++) {
         if (mask & (1 << i)) {
             *value++ = _DMXGetScreenAttribute(i, attr);
@@ -385,7 +413,7 @@ int DMXChangeScreensAttributes(Display *dpy,
         if (i < mask_count) mask = masks[i];
         req->length += _DMXDumpScreenAttributes(dpy, mask, attrs + i);
     }
-    
+
     if (!_XReply(dpy, (xReply *)&rep, 0, xFalse)) {
         UnlockDisplay(dpy);
         SyncHandle();
@@ -496,6 +524,7 @@ Bool DMXGetWindowAttributes(Display *dpy, Window window,
     CARD32                       *windows; /* Must match protocol size */
     XRectangle                   *pos;     /* Must match protocol size */
     XRectangle                   *vis;     /* Must match protocol size */
+    Bool                          ret = False;
 
     DMXCheckExtension(dpy, info, False);
 
@@ -510,17 +539,36 @@ Bool DMXGetWindowAttributes(Display *dpy, Window window,
         return False;
     }
 
-                                /* FIXME: check for NULL? */
-    screens    = Xmalloc(rep.screenCount * sizeof(*screens));
-    windows    = Xmalloc(rep.screenCount * sizeof(*windows));
-    pos        = Xmalloc(rep.screenCount * sizeof(*pos));
-    vis        = Xmalloc(rep.screenCount * sizeof(*vis));
+    /*
+     * rep.screenCount is a CARD32 so could be as large as 2^32
+     * The X11 protocol limits the total screen size to 64k x 64k,
+     * and no screen can be smaller than a pixel.  While technically
+     * that means we could theoretically reach 2^32 screens, and that's
+     * not even taking overlap into account, 64k seems far larger than
+     * any reasonable configuration, so we limit to that to prevent both
+     * integer overflow in the size calculations, and bad X server
+     * responses causing massive memory allocation.
+     */
+    if (rep.screenCount < 65536) {
+        screens    = Xmalloc(rep.screenCount * sizeof(*screens));
+        windows    = Xmalloc(rep.screenCount * sizeof(*windows));
+        pos        = Xmalloc(rep.screenCount * sizeof(*pos));
+        vis        = Xmalloc(rep.screenCount * sizeof(*vis));
+    } else {
+        screens = windows = NULL;
+        pos = vis = NULL;
+    }
+
+    if (!screens || !windows || !pos || !vis) {
+        _XEatDataWords(dpy, rep.length);
+        goto end;
+    }
 
     _XRead(dpy, (char *)screens, rep.screenCount * sizeof(*screens));
     _XRead(dpy, (char *)windows, rep.screenCount * sizeof(*windows));
     _XRead(dpy, (char *)pos,     rep.screenCount * sizeof(*pos));
     _XRead(dpy, (char *)vis,     rep.screenCount * sizeof(*vis));
-    
+
     *screen_count = rep.screenCount;
     for (current = 0;
          current < rep.screenCount && current < (unsigned)available_count;
@@ -530,7 +578,9 @@ Bool DMXGetWindowAttributes(Display *dpy, Window window,
         inf->pos       = pos[current];
         inf->vis       = vis[current];
     }
+    ret = True;
 
+  end:
     Xfree(vis);
     Xfree(pos);
     Xfree(windows);
@@ -538,7 +588,7 @@ Bool DMXGetWindowAttributes(Display *dpy, Window window,
 
     UnlockDisplay(dpy);
     SyncHandle();
-    return True;
+    return ret;
 }
 
 /** If the DMXGetDesktopAttributes protocol request returns information
@@ -592,7 +642,7 @@ static int _DMXDumpDesktopAttributes(Display *dpy,
     unsigned long value_list[32];
     unsigned long *value = value_list;
     int           count  = 0;
-        
+
     for (i = 0; i < 32; i++) {
         if (mask & (1 << i)) {
             *value++ = _DMXGetDesktopAttribute(i, attr);
@@ -608,7 +658,7 @@ static int _DMXDumpDesktopAttributes(Display *dpy,
  * Available in DMX Protocol Version 2.0 */
 int DMXChangeDesktopAttributes(Display *dpy,
                                unsigned int mask,
-                               DMXDesktopAttributes *attr) 
+                               DMXDesktopAttributes *attr)
 {
     XExtDisplayInfo                  *info = find_display(dpy);
     xDMXChangeDesktopAttributesReply rep;
@@ -622,7 +672,7 @@ int DMXChangeDesktopAttributes(Display *dpy,
     req->dmxReqType   = X_DMXChangeDesktopAttributes;
     req->valueMask    = mask;
     req->length      +=_DMXDumpDesktopAttributes(dpy, mask, attr);
-    
+
     if (!_XReply(dpy, (xReply *)&rep, 0, xFalse)) {
         UnlockDisplay(dpy);
         SyncHandle();
@@ -673,6 +723,7 @@ Bool DMXGetInputAttributes(Display *dpy, int id, DMXInputAttributes *inf)
     xDMXGetInputAttributesReply rep;
     xDMXGetInputAttributesReq   *req;
     char                        *buffer;
+    Bool                         ret = False;
 
     DMXCheckExtension(dpy, info, False);
 
@@ -687,6 +738,16 @@ Bool DMXGetInputAttributes(Display *dpy, int id, DMXInputAttributes *inf)
         return False;
     }
 
+    if (rep.nameLength < 1024)
+        buffer      = Xmalloc(rep.nameLength + 1 + 4 /* for pad */);
+    else
+        buffer      = NULL;  /* name length is unbelievable, reject */
+
+    if (buffer == NULL) {
+        _XEatDataWords(dpy, rep.length);
+        goto end;
+    }
+
     switch (rep.inputType) {
     case 0: inf->inputType = DMXLocalInputType;   break;
     case 1: inf->inputType = DMXConsoleInputType; break;
@@ -698,13 +759,14 @@ Bool DMXGetInputAttributes(Display *dpy, int id, DMXInputAttributes *inf)
     inf->isCore         = rep.isCore;
     inf->sendsCore      = rep.sendsCore;
     inf->detached       = rep.detached;
-    buffer              = Xmalloc(rep.nameLength + 1 + 4 /* for pad */);
     _XReadPad(dpy, buffer, rep.nameLength);
     buffer[rep.nameLength] = '\0';
     inf->name           = buffer;
+    ret = True;
+  end:
     UnlockDisplay(dpy);
     SyncHandle();
-    return True;
+    return ret;
 }
 
 /** Add input. */
@@ -756,7 +818,7 @@ Bool DMXAddBackendInput(Display *dpy, int screen, int sendsCore, int *newId)
     unsigned int       mask = (DMXInputType
                                | DMXInputPhysicalScreen
                                | DMXInputSendsCore);
-        
+
     attr.inputType        = DMXBackendInputType;
     attr.physicalScreen   = screen;
     attr.sendsCore        = sendsCore;
@@ -771,7 +833,7 @@ Bool DMXAddConsoleInput(Display *dpy, const char *name, int sendsCore,
     DMXInputAttributes attr;
     unsigned int       mask = (DMXInputType
                                | DMXInputSendsCore);
-        
+
     attr.inputType        = DMXConsoleInputType;
     attr.physicalScreen   = 0;
     attr.sendsCore        = sendsCore;

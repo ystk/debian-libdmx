@@ -1,3 +1,39 @@
+libdmx (1:1.1.2-1+deb7u1) wheezy-security; urgency=high
+
+  * integer overflows calculating memory needs for replies [CVE-2013-1992]
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 15 May 2013 20:12:21 +0200
+
+libdmx (1:1.1.2-1) unstable; urgency=low
+
+  [ Robert Hooker ]
+  * New upstream release.
+
+  [ Julien Cristau ]
+  * Remove debian/xsfbs/, it's not used in this package anymore.
+  * Build for multiarch.
+  * Don't require fakeroot for debian/rules clean.
+  * Use dh_install --fail-missing and ignore the .la file.
+  * Add build-arch and build-indep debian/rules targets.
+  * Remove David Nusinow from Uploaders.
+  * Bump Standards-Version to 3.9.3.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 25 Mar 2012 16:15:13 +0200
+
+libdmx (1:1.1.1-1) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * Rename the build directory to not include DEB_BUILD_GNU_TYPE for no
+    good reason.  Thanks, Colin Watson!
+  * Remove myself from Uploaders
+
+  [ Cyril Brulebois ]
+  * New upstream release.
+  * Bump xutils-dev build-dep for new macros.
+  * Add myself to Uploaders.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sat, 06 Nov 2010 10:51:38 +0100
+
 libdmx (1:1.1.0-2) unstable; urgency=low
 
   * Upload to unstable.
