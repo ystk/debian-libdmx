@@ -1,5 +1,3 @@
-.\" $XFree86$
-.\"
 .\" Copyright 2004 Red Hat Inc., Durham, North Carolina.
 .\" All Rights Reserved.
 .\"
@@ -57,9 +55,9 @@ screen number for the attached screen.
 The information stored in
 .I mask " and " attr
 is identical to that used by the
-.BR DMXChangeScreenAttributes (__libmansuffix__)
+.BR DMXChangeScreensAttributes (__libmansuffix__)
 and
-.BR DMXGetScreenAttribues (__libmansuffix__)
+.BR DMXGetScreenAttributes (__libmansuffix__)
 functions.
 .SH "RETURN VALUE"
 .B DMXAddScreen()
@@ -100,5 +98,5 @@ API, this function uses
 for both input and output.
 .SH "SEE ALSO"
 .BR DMXRemoveScreen "(__libmansuffix__), "
-.BR DMXChangeScreenAttributes "(__libmansuffix__), " DMXGetScreenAttributes "(__libmansuffix__), "
+.BR DMXChangeScreensAttributes "(__libmansuffix__), " DMXGetScreenAttributes "(__libmansuffix__), "
 .BR DMX "(__libmansuffix__), " Xdmx (1)

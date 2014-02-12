@@ -1,5 +1,3 @@
-.\" $XFree86$
-.\"
 .\" Copyright 2004 Red Hat Inc., Durham, North Carolina.
 .\" All Rights Reserved.
 .\"
@@ -40,7 +38,7 @@ returns information about the input device specified with
 .IR id .
 This information cannot be
 obtained from the
-.BR XListInputDeivices (__libmansuffix__)
+.BR XListInputDevices (__libmansuffix__)
 call.
 .I id
 is the same as that used by the
@@ -76,7 +74,7 @@ For local devices, all other fields returned, except
 .I isCore " and " sendsCore ,
 are invalid.
 .PP
-For console devices, 
+For console devices,
 .I physicalScreen " and " physicalID
 will be invalid, and
 .I name
