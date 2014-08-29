@@ -10,12 +10,6 @@
 # set this to the name of the main shlib's binary package
 PACKAGE = libdmx1
 
-CFLAGS = -Wall -g
-ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -O0
-else
-	CFLAGS += -O2
-endif
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
         NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
         MAKEFLAGS += -j$(NUMJOBS)
@@ -42,15 +36,14 @@ build-stamp:
 	../configure --prefix=/usr --mandir=\$${prefix}/share/man \
 	             --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 	             --infodir=\$${prefix}/share/info $(confflags) \
-	             CFLAGS="$(CFLAGS)" 
+		     --disable-silent-rules \
+		     $(shell DEB_CFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
 	cd build && $(MAKE)
-
-	touch build-stamp
+	>$@
 
 clean:
 	dh_testdir
 	rm -f build-stamp
-
 	rm -f config.cache config.log config.status
 	rm -f */config.cache */config.log */config.status
 	rm -f conftest* */conftest*
@@ -59,7 +52,6 @@ clean:
 	rm -f INSTALL aclocal.m4 config.guess config.h.in config.sub configure
 	rm -f depcomp install-sh ltmain.sh missing mkinstalldirs
 	find -name Makefile.in -delete
-
 	dh_clean
 
 install: build
@@ -67,14 +59,12 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-
 	cd build && $(MAKE) DESTDIR=$(CURDIR)/debian/tmp install
 
 # Build architecture-dependent files here.
 binary-arch: build install
 	dh_testdir
 	dh_testroot
-
 	dh_installdocs
 	dh_install --sourcedir=debian/tmp --fail-missing -X.la
 	dh_installchangelogs
